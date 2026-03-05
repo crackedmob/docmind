@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DocMind — AI Document Intelligence</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #111118;
+      --border: #1e1e2e;
+      --accent: #7fffb2;
+      --accent2: #5de0ff;
+      --accent3: #ff6b6b;
+      --text: #e8e8f0;
+      --muted: #5a5a7a;
+      --card: #13131f;
+      --user-bubble: #1a2a1a;
+      --ai-bubble: #13131f;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Space Mono', monospace;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(127, 255, 178, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(127, 255, 178, 0.025) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px;
+      position: relative;
+      z-index: 1;
+    }
+
+    header {
+      padding: 32px 0 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1.8rem;
+      color: var(--accent);
+      letter-spacing: -0.5px;
+    }
+
+    .logo span { color: var(--text); }
+
+    .tagline {
+      font-size: 0.7rem;
+      color: var(--muted);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      display: inline-block;
+      margin-right: 8px;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .status-label { font-size: 0.7rem; color: var(--muted); letter-spacing: 1px; }
+
+    .tabs {
+      display: flex;
+      gap: 2px;
+      margin: 32px 0 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tab {
+      padding: 10px 20px;
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.75rem;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: all 0.2s;
+    }
+
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    /* Upload */
+    .upload-zone {
+      border: 1px dashed var(--border);
+      border-radius: 4px;
+      padding: 48px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+    }
+
+    .upload-zone:hover, .upload-zone.dragover {
+      border-color: var(--accent);
+      background: rgba(127, 255, 178, 0.03);
+    }
+
+    .upload-zone input {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    .upload-icon { font-size: 2.5rem; margin-bottom: 12px; display: block; }
+    .upload-title { font-family: 'Syne', sans-serif; font-size: 1.1rem; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+    .upload-sub { font-size: 0.7rem; color: var(--muted); letter-spacing: 1px; }
+
+    .docs-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .doc-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.75rem;
+      transition: border-color 0.2s;
+    }
+
+    .doc-card:hover { border-color: var(--accent); }
+    .doc-icon { font-size: 1.4rem; flex-shrink: 0; }
+    .doc-name { color: var(--text); word-break: break-word; line-height: 1.4; }
+
+    /* Chat */
+    .chat-container {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 280px);
+      min-height: 400px;
+    }
+
+    .chat-history {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .chat-history::-webkit-scrollbar { width: 4px; }
+    .chat-history::-webkit-scrollbar-track { background: transparent; }
+    .chat-history::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .chat-bubble {
+      display: flex;
+      flex-direction: column;
+      max-width: 80%;
+      animation: fadeIn 0.2s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .chat-bubble.user { align-self: flex-end; }
+    .chat-bubble.assistant { align-self: flex-start; }
+
+    .bubble-label {
+      font-size: 0.6rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      color: var(--muted);
+    }
+
+    .chat-bubble.user .bubble-label { text-align: right; color: var(--accent); }
+    .chat-bubble.assistant .bubble-label { color: var(--accent2); }
+
+    .bubble-content {
+      padding: 14px 18px;
+      border-radius: 4px;
+      font-size: 0.82rem;
+      line-height: 1.8;
+      white-space: pre-wrap;
+    }
+
+    .chat-bubble.user .bubble-content {
+      background: var(--user-bubble);
+      border: 1px solid rgba(127, 255, 178, 0.15);
+      color: var(--text);
+    }
+
+    .chat-bubble.assistant .bubble-content {
+      background: var(--ai-bubble);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    .bubble-sources {
+      font-size: 0.62rem;
+      color: var(--muted);
+      margin-top: 6px;
+      letter-spacing: 0.5px;
+    }
+
+    .empty-chat {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 0.75rem;
+      letter-spacing: 1px;
+      gap: 8px;
+    }
+
+    .empty-chat-icon { font-size: 2rem; opacity: 0.4; }
+
+    /* Input bar */
+    .chat-input-bar {
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+
+    .chat-input {
+      flex: 1;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.82rem;
+      padding: 12px 16px;
+      resize: none;
+      min-height: 48px;
+      max-height: 140px;
+      outline: none;
+      line-height: 1.6;
+      transition: border-color 0.2s;
+    }
+
+    .chat-input:focus { border-color: var(--accent); }
+    .chat-input::placeholder { color: var(--muted); }
+
+    .send-btn {
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      padding: 0 20px;
+      height: 48px;
+      cursor: pointer;
+      text-transform: uppercase;
+      border-radius: 4px;
+      transition: opacity 0.2s;
+      white-space: nowrap;
+    }
+
+    .send-btn:hover { opacity: 0.85; }
+    .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .clear-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.65rem;
+      padding: 0 14px;
+      height: 48px;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .clear-btn:hover { border-color: var(--accent3); color: var(--accent3); }
+
+    /* Summarize */
+    .summarize-controls {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .doc-select {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.75rem;
+      padding: 10px 14px;
+      outline: none;
+      cursor: pointer;
+      flex: 1;
+      min-width: 180px;
+    }
+
+    .doc-select:focus { border-color: var(--accent); }
+
+    .action-btn {
+      background: none;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 1px;
+      padding: 10px 20px;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: all 0.2s;
+      border-radius: 4px;
+    }
+
+    .action-btn:hover { background: var(--accent); color: var(--bg); }
+    .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .action-btn.secondary { border-color: var(--accent2); color: var(--accent2); }
+    .action-btn.secondary:hover { background: var(--accent2); color: var(--bg); }
+
+    .answer-block {
+      margin-top: 20px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .answer-header {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .answer-label { font-size: 0.65rem; color: var(--accent); letter-spacing: 2px; text-transform: uppercase; }
+    .answer-sources { font-size: 0.65rem; color: var(--muted); }
+    .answer-body { padding: 20px; font-size: 0.82rem; line-height: 1.8; color: var(--text); white-space: pre-wrap; }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 12px 20px;
+      font-size: 0.75rem;
+      z-index: 100;
+      animation: fadeIn 0.3s ease;
+      max-width: 320px;
+      display: none;
+    }
+
+    .toast.success { border-color: var(--accent); color: var(--accent); }
+    .toast.error { border-color: var(--accent3); color: var(--accent3); }
+
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .section-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 0.65rem;
+      font-weight: 600;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
+    .empty-state { text-align: center; padding: 48px; color: var(--muted); font-size: 0.75rem; letter-spacing: 1px; }
+    hr { border: none; border-top: 1px solid var(--border); margin: 28px 0; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="header-inner">
+      <div>
+        <div class="logo">Doc<span>Mind</span></div>
+        <div class="tagline">AI Document Intelligence</div>
+      </div>
+      <div>
+        <span class="status-dot"></span>
+        <span class="status-label">RAG Pipeline Ready</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('upload')">01 — Upload</button>
+    <button class="tab" onclick="switchTab('query')">02 — Query</button>
+    <button class="tab" onclick="switchTab('summarize')">03 — Summarize</button>
+  </div>
+
+  <!-- UPLOAD PANEL -->
+  <div id="tab-upload" class="panel active">
+    <div class="upload-zone" id="dropZone">
+      <input type="file" id="fileInput" accept=".pdf,.txt,.docx,.jpg,.jpeg,.png" onchange="handleFileSelect(event)" />
+      <span class="upload-icon">📄</span>
+      <div class="upload-title">Drop file here or click to browse</div>
+      <div class="upload-sub">Supported: PDF, TXT, DOCX, JPG, PNG — up to 50MB</div>
+    </div>
+
+    <div id="uploadStatus"></div>
+    <hr />
+    <div class="section-title">Uploaded Documents</div>
+    <div id="docsList" class="docs-grid">
+      <div class="empty-state">No documents yet. Upload a PDF to get started.</div>
+    </div>
+  </div>
+
+  <!-- QUERY PANEL -->
+  <div id="tab-query" class="panel">
+    <div class="section-title">Chat with your documents</div>
+
+    <div class="chat-container">
+      <div class="chat-history" id="chatHistory">
+        <div class="empty-chat" id="emptyChatMsg">
+          <span class="empty-chat-icon">💬</span>
+          <span>Upload a document and start asking questions</span>
+          <span style="font-size:0.65rem; opacity:0.6">Follow-up questions are supported</span>
+        </div>
+      </div>
+
+      <div class="chat-input-bar">
+        <textarea
+          id="questionInput"
+          class="chat-input"
+          placeholder="Ask anything about your documents... (Enter to send, Shift+Enter for new line)"
+          onkeydown="handleQueryKey(event)"
+          oninput="autoResize(this)"
+          rows="1"
+        ></textarea>
+        <button class="clear-btn" onclick="clearChat()" title="Clear chat">Clear</button>
+        <button class="send-btn" id="queryBtn" onclick="submitQuery()">Send →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SUMMARIZE PANEL -->
+  <div id="tab-summarize" class="panel">
+    <div class="section-title">Summarize or compare documents</div>
+    <div style="margin-bottom: 24px;">
+      <div style="font-size:0.75rem; color:var(--muted); margin-bottom:12px;">Select one document to summarize, or two to compare:</div>
+      <div class="summarize-controls">
+        <select class="doc-select" id="doc1Select">
+          <option value="">— Select Document 1 —</option>
+        </select>
+        <select class="doc-select" id="doc2Select">
+          <option value="">— Document 2 (optional for compare) —</option>
+        </select>
+      </div>
+      <div style="display:flex; gap:12px; flex-wrap:wrap;">
+        <button class="action-btn" id="summarizeBtn" onclick="doSummarize()">Summarize →</button>
+        <button class="action-btn secondary" id="compareBtn" onclick="doCompare()">Compare Both →</button>
+      </div>
+    </div>
+    <div id="summarizeResult"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // ── State ──────────────────────────────────────────
+  let documents = [];
+  let chatHistory = []; // { role: "user"|"assistant", content: string }
+
+  // ── Init ───────────────────────────────────────────
+  window.onload = () => {
+    loadDocuments();
+    setupDragDrop();
+  };
+
+  // ── Tab switching ──────────────────────────────────
+  function switchTab(name) {
+    document.querySelectorAll('.tab').forEach((t, i) => {
+      t.classList.toggle('active', ['upload','query','summarize'][i] === name);
+    });
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    if (name !== 'upload') loadDocuments();
+  }
+
+  // ── Drag & Drop ────────────────────────────────────
+  function setupDragDrop() {
+    const zone = document.getElementById('dropZone');
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      zone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      const validExts = ['.pdf', '.txt', '.docx']; if (file && validExts.some(e => file.name.endsWith(e))) uploadFile(file);
+      else showToast('Only PDF files are supported', 'error');
+    });
+  }
+
+  function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (file) uploadFile(file);
+  }
+
+  // ── Upload ─────────────────────────────────────────
+  async function uploadFile(file) {
+    const status = document.getElementById('uploadStatus');
+    status.innerHTML = `<div style="padding:16px; font-size:0.75rem; color:var(--muted);">
+      <span class="spinner"></span> Processing "${file.name}" — extracting, chunking, embedding...
+    </div>`;
+
+    const formData = new FormData();
+    formData.append('pdf', file);
+
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+
+      if (data.error) {
+        status.innerHTML = `<div style="padding:16px; font-size:0.75rem; color:var(--accent3);">✗ ${data.error}</div>`;
+        showToast(data.error, 'error');
+      } else {
+        status.innerHTML = `<div style="padding:16px; font-size:0.75rem; color:var(--accent);">
+          ✓ "${data.doc_name}" processed — ${data.chunks} chunks stored
+        </div>`;
+        showToast('Document uploaded successfully!', 'success');
+        loadDocuments();
+      }
+    } catch (err) {
+      status.innerHTML = `<div style="padding:16px; font-size:0.75rem; color:var(--accent3);">✗ Upload failed. Is the server running?</div>`;
+    }
+
+    document.getElementById('fileInput').value = '';
+  }
+
+  // ── Load documents ─────────────────────────────────
+  async function loadDocuments() {
+    try {
+      const res = await fetch('/api/documents');
+      const data = await res.json();
+      documents = data.documents || [];
+      renderDocsList();
+      populateSelects();
+    } catch (err) {
+      console.error('Failed to load documents', err);
+    }
+  }
+
+  function renderDocsList() {
+    const el = document.getElementById('docsList');
+    if (!documents.length) {
+      el.innerHTML = '<div class="empty-state">No documents yet. Upload a PDF to get started.</div>';
+      return;
+    }
+    el.innerHTML = documents.map(d => `
+      <div class="doc-card">
+        <span class="doc-icon">📄</span>
+        <span class="doc-name">${d}</span>
+      </div>
+    `).join('');
+  }
+
+  function populateSelects() {
+    const opts = documents.map(d => `<option value="${d}">${d}</option>`).join('');
+    document.getElementById('doc1Select').innerHTML = '<option value="">— Select Document 1 —</option>' + opts;
+    document.getElementById('doc2Select').innerHTML = '<option value="">— Document 2 (optional) —</option>' + opts;
+  }
+
+  // ── Chat ───────────────────────────────────────────
+  function handleQueryKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      submitQuery();
+    }
+  }
+
+  function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+  }
+
+  function clearChat() {
+    chatHistory = [];
+    const hist = document.getElementById('chatHistory');
+    hist.innerHTML = `<div class="empty-chat" id="emptyChatMsg">
+      <span class="empty-chat-icon">💬</span>
+      <span>Upload a document and start asking questions</span>
+      <span style="font-size:0.65rem; opacity:0.6">Follow-up questions are supported</span>
+    </div>`;
+  }
+
+  function appendBubble(role, content, sources) {
+    const hist = document.getElementById('chatHistory');
+
+    // Remove empty state
+    const empty = document.getElementById('emptyChatMsg');
+    if (empty) empty.remove();
+
+    const label = role === 'user' ? 'You' : 'DocMind';
+    const sourcesHtml = sources && sources.length
+      ? `<div class="bubble-sources">📎 Sources: ${sources.join(', ')}</div>`
+      : '';
+
+    const div = document.createElement('div');
+    div.className = `chat-bubble ${role}`;
+    div.innerHTML = `
+      <div class="bubble-label">${label}</div>
+      <div class="bubble-content">${content}</div>
+      ${sourcesHtml}
+    `;
+    hist.appendChild(div);
+    hist.scrollTop = hist.scrollHeight;
+  }
+
+  function appendThinking() {
+    const hist = document.getElementById('chatHistory');
+    const div = document.createElement('div');
+    div.className = 'chat-bubble assistant';
+    div.id = 'thinkingBubble';
+    div.innerHTML = `
+      <div class="bubble-label">DocMind</div>
+      <div class="bubble-content" style="color:var(--muted)">
+        <span class="spinner"></span> Thinking...
+      </div>
+    `;
+    hist.appendChild(div);
+    hist.scrollTop = hist.scrollHeight;
+    return div;
+  }
+
+  async function submitQuery() {
+    const input = document.getElementById('questionInput');
+    const question = input.value.trim();
+    if (!question) return;
+
+    const btn = document.getElementById('queryBtn');
+    btn.disabled = true;
+    input.value = '';
+    input.style.height = 'auto';
+
+    // Show user bubble
+    appendBubble('user', question, null);
+
+    // Show thinking bubble
+    const thinking = appendThinking();
+
+    try {
+      const res = await fetch('/api/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, history: chatHistory })
+      });
+      const data = await res.json();
+
+      // Remove thinking bubble
+      thinking.remove();
+
+      if (data.error) {
+        appendBubble('assistant', '✗ ' + data.error, null);
+      } else {
+        appendBubble('assistant', data.answer, data.sources);
+
+        // Save to history for next turn
+        chatHistory.push({ role: 'user', content: question });
+        chatHistory.push({ role: 'assistant', content: data.answer });
+      }
+    } catch (err) {
+      thinking.remove();
+      appendBubble('assistant', '✗ Request failed. Is the server running?', null);
+    }
+
+    btn.disabled = false;
+    input.focus();
+  }
+
+  // ── Summarize / Compare ────────────────────────────
+  async function doSummarize() {
+    const doc1 = document.getElementById('doc1Select').value;
+    if (!doc1) { showToast('Select a document first', 'error'); return; }
+    await callSummarize([doc1]);
+  }
+
+  async function doCompare() {
+    const doc1 = document.getElementById('doc1Select').value;
+    const doc2 = document.getElementById('doc2Select').value;
+    if (!doc1 || !doc2) { showToast('Select two documents to compare', 'error'); return; }
+    if (doc1 === doc2) { showToast('Select two different documents', 'error'); return; }
+    await callSummarize([doc1, doc2]);
+  }
+
+  async function callSummarize(docNames) {
+    const btn = docNames.length === 1
+      ? document.getElementById('summarizeBtn')
+      : document.getElementById('compareBtn');
+    btn.disabled = true;
+
+    const resultEl = document.getElementById('summarizeResult');
+    const action = docNames.length === 1 ? 'Summarizing' : 'Comparing';
+    resultEl.innerHTML = `<div style="padding:20px; font-size:0.75rem; color:var(--muted);">
+      <span class="spinner"></span> ${action}...
+    </div>`;
+
+    try {
+      const res = await fetch('/api/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ doc_names: docNames })
+      });
+      const data = await res.json();
+
+      if (data.error) {
+        resultEl.innerHTML = `<div class="answer-block">
+          <div class="answer-header"><span class="answer-label" style="color:var(--accent3)">Error</span></div>
+          <div class="answer-body" style="color:var(--accent3)">${data.error}</div>
+        </div>`;
+      } else {
+        const label = data.type === 'summary' ? '// Summary' : '// Comparison';
+        resultEl.innerHTML = `<div class="answer-block">
+          <div class="answer-header">
+            <span class="answer-label">${label}</span>
+            <span class="answer-sources">${docNames.join(' vs ')}</span>
+          </div>
+          <div class="answer-body">${data.result}</div>
+        </div>`;
+      }
+    } catch (err) {
+      resultEl.innerHTML = `<div style="padding:20px; font-size:0.75rem; color:var(--accent3);">Request failed.</div>`;
+    }
+
+    btn.disabled = false;
+  }
+
+  // ── Toast ──────────────────────────────────────────
+  function showToast(msg, type = 'success') {
+    const el = document.getElementById('toast');
+    el.className = `toast ${type}`;
+    el.textContent = msg;
+    el.style.display = 'block';
+    setTimeout(() => { el.style.display = 'none'; }, 3500);
+  }
+</script>
+</body>
+</html>

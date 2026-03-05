@@ -1,0 +1,9 @@
+# Secret keys — never commit this!
+.env
+
+# Go build output
+docmind
+*.exe
+
+# Temp files
+*.tmp
