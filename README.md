@@ -2,7 +2,6 @@
 
 A RAG (Retrieval-Augmented Generation) system built in Go that lets you upload documents and have an intelligent conversation with them. Answers are grounded in your actual documents — not AI guesswork.
 
-Built as a final year project by Shipra Sharma.
 
 ---
 
