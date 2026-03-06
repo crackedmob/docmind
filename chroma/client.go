@@ -1,28 +1,48 @@
+// this file is a translator between go backend and chromaDb.
+// as chromaDB doesn't have Go lirary, this file manually speaks to it over HTTP
+// like writing our own mini API client from scratch
 package chroma
 
+// imports these are
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
+	"bytes"         // used to convert data into a format that can be sent over HTTP
+	"encoding/json" // converts Go structs/maps into JSON(and back) since chromaDB communicates in JSON
+	"fmt"           //string formatting, used for building URLs and error messages
+	"io"            // reads raw HTTP response bodies
+	"net/http"      // Go's built-in HTTP client, used to make GET/POST/DELETE requests to chromaDB
 )
 
+// these values tell the client where chromaDB lives and which workspace to use
 const (
-	chromaURL      = "http://localhost:8000"
+	chromaURL      = "http://localhost:8000" // chromaDB runs locally inside docker on port 8000
 	chromaTenant   = "default_tenant"
 	chromaDatabase = "default_database"
-)
+) // the other two: chromaDB v2 organizes data in hierarchy
+// tenant->database->collection.
+// tenant is a company, database is a project, collection is a table
+// to make it more easy and understandable :
+// gDrive(whole system) -> my account is tenant -> the project folder is database -> the docmind is collection
+// we use it as default because chromaDb was designed to support multiple users
+// and multiple projects on the same server. We use default because DocMind is a single user, single project app.
+// and we dont have any need for multiple tenants or databases
+// so we just use the ones chromaDB creates automatically - default_tenant and default_database-
+// and go staraight to our collection docmind
 
 // Client wraps ChromaDB HTTP API (v2)
-type Client struct {
+type Client struct { // struct in Go is like a class - it groups related data together
+	// baseURL, tenant, database, collection : these are the addressing information
+	// for where to store and find data in chromaDB
 	baseURL    string
 	tenant     string
 	database   string
 	collection string
-	httpClient *http.Client
+	httpClient *http.Client // it's the actual HTTP connection object that send requests
+	// having it here means all functions share one connection instead of creating a new one every time
 }
 
+// this is a constructor - the function we call to create a new client.
+// the * means it return a pointer(memory address) to the client rather than a copy.
+// it's important because we want all parts of the app sharing the same client instance, not different copies.
 // NewClient creates a new ChromaDB v2 client
 func NewClient(collection string) *Client {
 	return &Client{
@@ -31,22 +51,34 @@ func NewClient(collection string) *Client {
 		database:   chromaDatabase,
 		collection: collection,
 		httpClient: &http.Client{},
-	}
+	} // when called as chroma.NewClient("docmind"), it creates a client pointing
+	// at the docming collection inside the chromaDB
 }
 
+// base() - the URL builder:
+// it is a helper function that builds the base URL for every API call.
+// instead of repeating the long URL, everywhere, every function calls c.base()
+// and appends whatever endpoint it needs
 // base path for all v2 API calls
 func (c *Client) base() string {
-	return fmt.Sprintf("%s/api/v2/tenants/%s/databases/%s", c.baseURL, c.tenant, c.database)
+	return fmt.Sprintf("%s/api/v2/tenants/%s/databases/%s", c.baseURL, c.tenant, c.database) // this is specific to chromaDB v2's API format - the tenant and database must be in every URL
 }
 
+// in DocMind we have a session thing
+// this function is called everytime DocMind starts up - it gives the fresh session behaviour
+// it builds a DELETE HTTP request targetting the collection URL
 // ResetCollection deletes and recreates the collection for a fresh session
 func (c *Client) ResetCollection() error {
 	// Delete by collection name directly
+	// http.NewRequest returns two things simulatneously:
+	// req - the actual DELETE request object if it was built successfully
+	// err - an error object if something went wrong, or nil if everything is fine
 	req, err := http.NewRequest("DELETE",
 		fmt.Sprintf("%s/collections/%s", c.base(), c.collection),
 		nil,
-	)
-	if err != nil {
+	) // the nil at the end means no request body (DELETE requests don't need one)
+	// nil means "nothing"/"no error"
+	if err != nil { // checks if an error actually happened
 		return fmt.Errorf("failed to build delete request: %w", err)
 	}
 
@@ -54,35 +86,46 @@ func (c *Client) ResetCollection() error {
 	if err != nil {
 		return fmt.Errorf("failed to delete collection: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() // defer = run this when the function exits no matter what
+	//it is very Go-specific. HTTP responses must be manually closed or we get memory leaks
 
 	b, _ := io.ReadAll(resp.Body)
-	// 200 = deleted, 404 = didn't exist — both are fine
+	// 200 = deleted, 404 = didn't exist — both are fine since on first startup there is nothing to delete
 	if resp.StatusCode != 200 && resp.StatusCode != 404 {
 		return fmt.Errorf("delete collection failed (status %d): %s", resp.StatusCode, string(b))
 	}
-
+	// after deleting, it immediately calls EnsureCollection() to create a fresh empty one
 	// Recreate fresh empty collection
 	return c.EnsureCollection()
 }
 
 // EnsureCollection creates the collection if it doesn't exist
 func (c *Client) EnsureCollection() error {
-	body, _ := json.Marshal(map[string]interface{}{
+	body, _ := json.Marshal(map[string]interface{}{ // collection config as JSON byte slice
 		"name": c.collection,
 		"configuration": map[string]interface{}{
 			"hnsw": map[string]string{"space": "cosine"},
-		},
+		}, // HNSW is hierarchical navigable small world - it is the algorithm
+		// chromaDB uses to find similar vectors quickly.
+		// cosine similarity is the mathematical method used to measure how similar
+		// two vectors are. It measures the angle between them - 0 degree angle between them means identical meaning,
+		// 90 degree angle between them means completely unrelated.
+		// standard for text embeddings
 	})
-
-	resp, err := c.httpClient.Post(
-		c.base()+"/collections",
-		"application/json",
-		bytes.NewBuffer(body),
+	// this part actually sends the request to chromaDB to create a new collection
+	// httpClient.Post expects an io.Reader type, not raw bytes
+	resp, err := c.httpClient.Post( // sends an HTTP POST request
+		c.base()+"/collections", // where to send it , builds the full URL by combining the base URL with collection, this is chromaDB's endpoint for creating a new collection
+		"application/json",      // what format the data is in, this is a content-type header, it tells the chromaDB about the type of content it has. Without this chromaDB would not know how to read the request body and would rehect it
+		bytes.NewBuffer(body),   // the actual data being sent, it wraps the bytes into a readable stream
+		// that the HTTP client can read from while sending
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create collection: %w", err)
 	}
+	// when chromaDB send back a response, Go opens a network stream to read it.
+	// that stream stays open and holds memory until we explicitly close it
+	// if we never close it, we get a memory leak
 	defer resp.Body.Close()
 
 	// 200/201 = created, 409 = already exists — both fine
